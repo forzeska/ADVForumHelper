@@ -143,7 +143,7 @@
             const filtered = templates.filter(t => t.title.toLowerCase().includes(filter.toLowerCase()));
             filtered.forEach((t) => {
                 let b = document.createElement('button');
-                b.innerText = t.title;
+                b.innerText = t.title || "Без названия";
                 b.className = 'helper-btn-tpl';
                 if (isList) b.style.width = "100%";
                 b.onclick = () => { insertText(t.text); removeOldModal(); };
@@ -182,10 +182,10 @@
             div.style.cssText = 'background:#1f1f1f; padding:12px; margin-bottom:12px; border-radius:8px; border:1px solid #333; position:relative;';
             div.innerHTML = `
                 <div style="display:flex; align-items:center; margin-bottom:8px;">
-                    <input type="text" class="t-title-input" value="${t.title}" style="flex:1; background:#111; color:#ff4d4d; border:1px solid #333; padding:8px; border-radius:4px; font-weight:bold; border-left: 3px solid #ff4d4d;">
+                    <input type="text" class="t-title-input" value="${t.title || ''}" style="flex:1; background:#111; color:#ff4d4d; border:1px solid #333; padding:8px; border-radius:4px; font-weight:bold; border-left: 3px solid #ff4d4d;">
                     <span class="char-counter" id="cnt-${i}">${t.title.length}/30</span>
                 </div>
-                <textarea class="t-text-input" style="width:100%; background:#111; color:#bbb; border:1px solid #333; padding:8px; height:80px; border-radius:4px; resize:none; font-size:13px; font-family: sans-serif;">${t.text}</textarea>
+                <textarea class="t-text-input" style="width:100%; background:#111; color:#bbb; border:1px solid #333; padding:8px; height:80px; border-radius:4px; resize:none; font-size:13px; font-family: sans-serif;">${t.text || ''}</textarea>
                 <div class="del-t" style="position:absolute; top:12px; right:55px; width:24px; height:24px; background:#3d1a1a; color:#ff4d4d; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; border: 1px solid #ff4d4d;">&times;</div>`;
             container.appendChild(div);
 
