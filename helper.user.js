@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  Помощник с работой на форуме
-// @author       You
+// @author       forzese
 // @match        *://forum.adv-rp.com/*
 // @match        *://*.adv-rp.com/*
 // @grant        none
