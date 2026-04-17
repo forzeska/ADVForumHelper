@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FORUM HELPER Advance RP
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.0.1
 // @description  Помощник с работой на форуме
 // @author       forzese
 // @match        *://forum.adv-rp.com/*
@@ -129,10 +129,11 @@
     document.head.appendChild(styleSheet);
 
     let templates = JSON.parse(localStorage.getItem('xf_templates')) || [
-        { title: "Приятной игры", text: "Здравствуйте!\nПриятной игры!|" }
+        { title: "Приятной игры", text: "Здравствуйте!\nПриятной игры!" }
     ];
 
     window.__helperSelectedPrefix = null;
+    window.__helperManualAction = false;
     let cachedEditData = null;
     let isFetchingPrefixes = false;
 
@@ -258,6 +259,7 @@
         const sticky = form.querySelector('input[name="sticky"]')?.checked ? '1' : '0';
         const indexState = form.querySelector('input[name="index_state"]:checked')?.value || 'default';
         const editUrl = form.getAttribute('action');
+        const discussionOpen = form.querySelector('input[name="discussion_open"]')?.checked ? '1' : '0';
 
         let prefixSelect = form.querySelector('select[name="prefix_id"]');
         let prefixOptions = [];
@@ -282,40 +284,36 @@
         hiddenContainer.remove();
         cleanupOverlayArtifacts();
 
-        cachedEditData = { title, token, sticky, indexState, editUrl, prefixOptions };
+        cachedEditData = { title, token, sticky, indexState, editUrl, prefixOptions, discussionOpen };
         isFetchingPrefixes = false;
         return cachedEditData;
     }
 
-    async function changePrefixAndClose(prefixId) {
+    async function changePrefixAndClose(prefixId, shouldClose) {
         if (!cachedEditData) {
             cachedEditData = await fetchEditDataWithHiddenOverlay();
             if (!cachedEditData) return false;
         }
+
         const data = cachedEditData;
         const formData = new URLSearchParams();
+
         formData.append('_xfToken', data.token);
         formData.append('title', data.title);
         formData.append('prefix_id', prefixId);
-        formData.append('discussion_open', '0');
-        formData.append('sticky', data.sticky);
-        formData.append('index_state', data.indexState);
-        formData.append('_xfSet[discussion_open]', '1');
-        formData.append('_xfSet[sticky]', '1');
-        formData.append('_xfSet[index_state]', '1');
+
+        formData.append('discussion_open', shouldClose ? '0' : (data.discussionOpen || '1'));
+        formData.append('_xfSet[]', 'discussion_open');
+
+        formData.append('_xfSet[]', 'prefix_id');
+
+        formData.append('index_state', data.indexState || 'visible');
+
         formData.append('_xfResponseType', 'json');
         formData.append('_xfWithData', '1');
         formData.append('_xfRequestUri', window.location.pathname);
-        formData.append('_xfToken', data.token);
 
         let editUrl = data.editUrl;
-        if (!editUrl) {
-            const threadMatch = window.location.pathname.match(/\/threads\/[^\/]+\.(\d+)/);
-            if (threadMatch) {
-                editUrl = `/threads/${threadMatch[0].split('/').pop()}/edit`;
-                if (!editUrl.startsWith('http')) editUrl = window.location.origin + editUrl;
-            }
-        }
         if (!editUrl) return false;
 
         try {
@@ -328,10 +326,15 @@
                 body: formData,
                 credentials: 'same-origin'
             });
+
             const result = await response.json();
-            return result._redirectStatus === 'ok' || response.ok;
+
+            console.log('XF RESPONSE:', result);
+
+            return result.status === 'ok' || result._redirectStatus === 'ok' || response.ok;
+
         } catch (err) {
-            console.error(err);
+            console.error('XF ERROR:', err);
             return false;
         }
     }
@@ -348,49 +351,104 @@
             showToast('Не найдена кнопка ответа');
             return;
         }
+
+        window.__helperManualAction = true;
+
         replyBtn.click();
         showToast('Отправка ответа...');
+
         await new Promise(r => setTimeout(r, 1500));
 
-        if (window.__helperSelectedPrefix && window.__helperSelectedPrefix !== '0') {
+        if (window.__helperSelectedPrefix && window.__helperSelectedPrefix !== null) {
             showToast('Меняем префикс и закрываем тему...');
-            const success = await changePrefixAndClose(window.__helperSelectedPrefix);
+            const success = await changePrefixAndClose(window.__helperSelectedPrefix, true);
             if (success) {
                 showToast('Префикс изменён, тема закрыта!');
-                setTimeout(() => location.reload(), 1500);
+                setTimeout(() => location.reload(), 1000);
             } else {
-                showToast('Не удалось изменить префикс');
+                showToast('Не удалось изменить префикс/закрыть');
             }
         } else {
             const closeLink = Array.from(document.querySelectorAll('a.menu-linkRow')).find(link => link.textContent.includes('Закрыть тему'));
             if (closeLink) {
                 closeLink.click();
                 showToast('Тема закрыта');
-                setTimeout(() => location.reload(), 1500);
+                setTimeout(() => location.reload(), 1000);
             } else {
-                showToast('Не найдена ссылка закрытия темы');
+                showToast('Тема оставлена открытой (префикс не выбран)');
             }
+        }
+        setTimeout(() => {
+            window.__helperManualAction = false;
+        }, 3000);
+    }
+
+    async function changePrefixOnly(prefixId) {
+        if (!cachedEditData) {
+            cachedEditData = await fetchEditDataWithHiddenOverlay();
+            if (!cachedEditData) return false;
+        }
+
+        const data = cachedEditData;
+        const formData = new URLSearchParams();
+
+        formData.append('_xfToken', data.token);
+        formData.append('title', data.title);
+
+        formData.append('prefix_id', prefixId);
+        formData.append('_xfSet[]', 'prefix_id');
+
+        formData.append('discussion_open', data.discussionOpen || '1');
+        formData.append('_xfSet[]', 'discussion_open');
+
+        formData.append('index_state', data.indexState || 'visible');
+
+        formData.append('_xfRequestUri', window.location.pathname);
+        formData.append('_xfWithData', '1');
+        formData.append('_xfResponseType', 'json');
+
+        try {
+            const response = await fetch(data.editUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData,
+                credentials: 'same-origin'
+            });
+
+            const result = await response.json();
+            console.log('PREFIX RESULT:', result);
+
+            return result.status === 'ok' || response.ok;
+
+        } catch (err) {
+            console.error(err);
+            return false;
         }
     }
 
     function hookRegularReplyButton() {
         const replyBtn = document.querySelector('button.button--primary.button--icon--reply');
-        if (!replyBtn) return;
-        if (replyBtn._helperHooked) return;
+        if (!replyBtn || replyBtn._helperHooked) return;
         replyBtn._helperHooked = true;
+
         replyBtn.addEventListener('click', async function() {
+
+            if (window.__helperManualAction) return;
+
             setTimeout(async () => {
-                if (window.__helperSelectedPrefix && window.__helperSelectedPrefix !== '0') {
-                    showToast('Применяем выбранный префикс...');
-                    const success = await changePrefixAndClose(window.__helperSelectedPrefix);
+                if (window.__helperSelectedPrefix && window.__helperSelectedPrefix !== null) {
+                    showToast('Применяем префикс...');
+                    const success = await changePrefixOnly(window.__helperSelectedPrefix);
+                    console.log(window.__helperSelectedPrefix);
                     if (success) {
                         showToast('Префикс применён!');
-                        setTimeout(() => location.reload(), 1500);
-                    } else {
-                        showToast('Не удалось применить префикс');
+                        setTimeout(() => location.reload(), 500);
                     }
                 }
-            }, 2000);
+            }, 2500);
         });
     }
 
@@ -412,24 +470,24 @@
             const openBtn = createSvgBtn('Открыть тему', iconLockToggle, replyBtn, () => {
                 unlockLink.click();
                 showToast('Тема открывается...');
-                setTimeout(() => location.reload(), 1000);
+                setTimeout(() => location.reload(), 500);
             });
             wrapper.appendChild(openBtn);
         } else if (lockLink) {
             const closeBtn = createSvgBtn('Закрыть тему', iconLockToggle, replyBtn, async () => {
                 if (window.__helperSelectedPrefix && window.__helperSelectedPrefix !== '0') {
                     showToast('Меняем префикс и закрываем тему...');
-                    const success = await changePrefixAndClose(window.__helperSelectedPrefix);
+                    const success = await changePrefixAndClose(window.__helperSelectedPrefix, true);
                     if (success) {
                         showToast('Префикс изменён, тема закрыта!');
-                        setTimeout(() => location.reload(), 1500);
+                        setTimeout(() => location.reload(), 1000);
                     } else {
                         showToast('Не удалось изменить префикс');
                     }
                 } else {
                     lockLink.click();
                     showToast('Тема закрывается...');
-                    setTimeout(() => location.reload(), 1000);
+                    setTimeout(() => location.reload(), 500);
                 }
             });
             wrapper.appendChild(closeBtn);
